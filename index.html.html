@@ -25,6 +25,31 @@ function resize(){
 }
 
 /* ======================
+   遊戲狀態
+====================== */
+let gameState = "menu"; // menu | playing
+
+/* ======================
+   選單資料
+====================== */
+let selectedWeapon = "pistol";
+let selectedDifficulty = "normal";
+
+const weapons = {
+  pistol:  { dmg:1, cooldown:250, speed:8 },
+  shotgun:{ dmg:0.6, cooldown:600, pellets:5, spread:0.4 },
+  sniper: { dmg:4, cooldown:900, speed:14 }
+};
+
+const difficulties = {
+  easy:   { enemySpeed:0.8, spawnRate:1400 },
+  normal: { enemySpeed:1,   spawnRate:1000 },
+  hard:   { enemySpeed:1.4, spawnRate:700 }
+};
+
+let spawnTimer;
+
+/* ======================
    玩家
 ====================== */
 const player = {
@@ -35,8 +60,6 @@ const player = {
   hp: 100,
   maxHp: 100,
   invincible: false,
-
-  // 翻滾
   rollCD: 0,
   rolling: false,
   rollTime: 0
@@ -47,14 +70,15 @@ window.onkeydown = e => keys[e.key] = true;
 window.onkeyup = e => keys[e.key] = false;
 
 /* ======================
-   武器 / RPG
+   武器
 ====================== */
-const weapon = {
-  level: 1,
-  dmg: 1,
-  cooldown: 250,
-  exp: 0
-};
+let weapon = {};
+
+function applyWeapon(){
+  Object.assign(weapon, weapons[selectedWeapon]);
+  weapon.level = 1;
+  weapon.exp = 0;
+}
 
 function upgradeWeapon(){
   weapon.level++;
@@ -63,58 +87,117 @@ function upgradeWeapon(){
 }
 
 /* ======================
-   技能：子彈時間
+   子彈時間
 ====================== */
 let bulletTime = {
-  active: false,
-  energy: 100,
-  max: 100,
-  cooldown: 0
+  active:false,
+  energy:100,
+  max:100
 };
 
 /* ======================
    滑鼠 / 子彈
 ====================== */
-let mouseX = 0, mouseY = 0;
-canvas.onmousemove = e => {
-  mouseX = e.clientX;
-  mouseY = e.clientY;
+let mouseX=0, mouseY=0;
+canvas.onmousemove = e=>{
+  mouseX=e.clientX;
+  mouseY=e.clientY;
 };
 
-const bullets = [];
-let lastShot = 0;
+const bullets=[];
+let lastShot=0;
 
-canvas.onclick = () => {
-  const now = Date.now();
-  if (now - lastShot < weapon.cooldown) return;
-  lastShot = now;
+canvas.onclick = ()=>{
+  if(gameState!=="playing") return;
 
-  const a = Math.atan2(mouseY-player.y, mouseX-player.x);
-  bullets.push({
-    x: player.x,
-    y: player.y,
-    vx: Math.cos(a)*8,
-    vy: Math.sin(a)*8,
-    life: 80
-  });
+  const now=Date.now();
+  if(now-lastShot<weapon.cooldown) return;
+  lastShot=now;
+
+  const baseAngle=Math.atan2(mouseY-player.y,mouseX-player.x);
+
+  if(selectedWeapon==="shotgun"){
+    for(let i=0;i<weapon.pellets;i++){
+      const a=baseAngle+(Math.random()-0.5)*weapon.spread;
+      bullets.push({
+        x:player.x,y:player.y,
+        vx:Math.cos(a)*weapon.speed,
+        vy:Math.sin(a)*weapon.speed,
+        life:50
+      });
+    }
+  }else{
+    bullets.push({
+      x:player.x,y:player.y,
+      vx:Math.cos(baseAngle)*weapon.speed,
+      vy:Math.sin(baseAngle)*weapon.speed,
+      life:80
+    });
+  }
 };
 
 /* ======================
-   敵人 / Boss
+   敵人
 ====================== */
-const enemies = [];
+const enemies=[];
 
 function spawnEnemy(isBoss=false){
   enemies.push({
-    x: Math.random()*canvas.width,
-    y: Math.random()*canvas.height,
-    hp: isBoss?80:15,
-    speed: isBoss?0.6:1.2,
-    boss: isBoss
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    hp:isBoss?80:15,
+    speed:(isBoss?0.6:1.2)*difficulties[selectedDifficulty].enemySpeed,
+    boss:isBoss
   });
 }
 
-setInterval(()=>spawnEnemy(Math.random()<0.2),1000);
+/* ======================
+   主選單
+====================== */
+function drawMenu(){
+  ctx.fillStyle="white";
+  ctx.textAlign="center";
+  ctx.font="36px sans-serif";
+  ctx.fillText("Canvas Shooter Ultimate",canvas.width/2,120);
+
+  ctx.font="22px sans-serif";
+  ctx.fillText("選擇武器：",canvas.width/2,200);
+  ctx.fillText("1 手槍   2 霰彈   3 狙擊",canvas.width/2,240);
+
+  ctx.fillText("選擇難度：",canvas.width/2,300);
+  ctx.fillText("Q 簡單   W 普通   E 困難",canvas.width/2,340);
+
+  ctx.fillText("Enter 開始遊戲",canvas.width/2,420);
+  ctx.textAlign="left";
+}
+
+window.addEventListener("keydown",e=>{
+  if(gameState!=="menu") return;
+
+  if(e.key==="1") selectedWeapon="pistol";
+  if(e.key==="2") selectedWeapon="shotgun";
+  if(e.key==="3") selectedWeapon="sniper";
+
+  if(e.key==="q") selectedDifficulty="easy";
+  if(e.key==="w") selectedDifficulty="normal";
+  if(e.key==="e") selectedDifficulty="hard";
+
+  if(e.key==="Enter"){
+    startGame();
+  }
+});
+
+/* ======================
+   開始遊戲
+====================== */
+function startGame(){
+  gameState="playing";
+  applyWeapon();
+
+  spawnTimer=setInterval(()=>{
+    spawnEnemy(Math.random()<0.2);
+  },difficulties[selectedDifficulty].spawnRate);
+}
 
 /* ======================
    主迴圈
@@ -122,9 +205,14 @@ setInterval(()=>spawnEnemy(Math.random()<0.2),1000);
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const timeScale = bulletTime.active ? 0.3 : 1;
+  if(gameState==="menu"){
+    drawMenu();
+    requestAnimationFrame(loop);
+    return;
+  }
 
-  /* ===== 玩家移動 ===== */
+  const timeScale=bulletTime.active?0.3:1;
+
   let mx=0,my=0;
   if(keys.w) my--;
   if(keys.s) my++;
@@ -133,17 +221,17 @@ function loop(){
 
   if(player.rolling){
     player.rollTime--;
-    player.invincible = true;
-    player.x += mx*10;
-    player.y += my*10;
+    player.invincible=true;
+    player.x+=mx*10;
+    player.y+=my*10;
     if(player.rollTime<=0){
       player.rolling=false;
       player.invincible=false;
       player.rollCD=120;
     }
   }else{
-    player.x += mx*player.speed;
-    player.y += my*player.speed;
+    player.x+=mx*player.speed;
+    player.y+=my*player.speed;
   }
 
   if(player.rollCD>0) player.rollCD--;
@@ -153,48 +241,37 @@ function loop(){
     player.rollTime=12;
   }
 
-  /* ===== 子彈時間 ===== */
   if(keys[" "] && bulletTime.energy>0){
     bulletTime.active=true;
     bulletTime.energy--;
   }else{
     bulletTime.active=false;
-    if(bulletTime.energy<bulletTime.max) bulletTime.energy+=0.5;
+    bulletTime.energy=Math.min(bulletTime.max,bulletTime.energy+0.5);
   }
 
-  /* ===== 子彈 ===== */
   bullets.forEach((b,i)=>{
-    b.x += b.vx*timeScale;
-    b.y += b.vy*timeScale;
+    b.x+=b.vx*timeScale;
+    b.y+=b.vy*timeScale;
     b.life--;
     ctx.fillStyle="yellow";
     ctx.fillRect(b.x-2,b.y-2,4,4);
     if(b.life<=0) bullets.splice(i,1);
   });
 
-  /* ===== 敵人 ===== */
   enemies.forEach((e,ei)=>{
-    const dx=player.x-e.x, dy=player.y-e.y;
+    const dx=player.x-e.x,dy=player.y-e.y;
     const d=Math.hypot(dx,dy)||1;
     e.x+=dx/d*e.speed*timeScale;
     e.y+=dy/d*e.speed*timeScale;
 
-    const head={x:e.x,y:e.y-14,r:8};
-    const body={x:e.x,y:e.y,r:16};
-
     bullets.forEach((b,bi)=>{
-      if(Math.hypot(b.x-head.x,b.y-head.y)<head.r){
-        e.hp-=weapon.dmg*2;
-        bullets.splice(bi,1);
-      }else if(Math.hypot(b.x-body.x,b.y-body.y)<body.r){
+      if(Math.hypot(b.x-e.x,b.y-e.y)<16){
         e.hp-=weapon.dmg;
         bullets.splice(bi,1);
       }
     });
 
-    if(!player.invincible && d<20){
-      player.hp--;
-    }
+    if(!player.invincible && d<20) player.hp--;
 
     if(e.hp<=0){
       enemies.splice(ei,1);
@@ -206,53 +283,14 @@ function loop(){
     ctx.beginPath();
     ctx.arc(e.x,e.y,16,0,Math.PI*2);
     ctx.fill();
-
-    if(e.boss){
-      ctx.fillStyle="pink";
-      ctx.beginPath();
-      ctx.arc(head.x,head.y,8,0,Math.PI*2);
-      ctx.fill();
-    }
   });
 
-  /* ===== 玩家 ===== */
   ctx.fillStyle=player.invincible?"cyan":"white";
   ctx.beginPath();
   ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
   ctx.fill();
 
-  /* ===== UI ===== */
-  drawUI();
-
   requestAnimationFrame(loop);
-}
-
-function drawUI(){
-  // 血條
-  ctx.fillStyle="#400";
-  ctx.fillRect(20,20,200,12);
-  ctx.fillStyle="#f33";
-  ctx.fillRect(20,20,200*(player.hp/player.maxHp),12);
-
-  // 翻滾 CD
-  ctx.fillStyle="#333";
-  ctx.fillRect(20,40,200,8);
-  ctx.fillStyle="#0af";
-  ctx.fillRect(20,40,200*(1-player.rollCD/120),8);
-
-  // 子彈時間
-  ctx.fillStyle="#333";
-  ctx.fillRect(20,55,200,8);
-  ctx.fillStyle="#ff0";
-  ctx.fillRect(20,55,200*(bulletTime.energy/bulletTime.max),8);
-
-  ctx.fillStyle="white";
-  ctx.fillText(`Weapon Lv ${weapon.level}`,20,80);
-
-  if(bulletTime.active){
-    ctx.fillStyle="rgba(0,0,0,0.4)";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
 }
 
 loop();
